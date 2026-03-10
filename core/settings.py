@@ -1,10 +1,27 @@
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langfuse import Langfuse
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .logger import configure_logging
+
+
+class LangfuseConfig(BaseModel):
+    secret_key: str
+    public_key: str
+    base_url: str
+
+    @cached_property
+    def client(self) -> Langfuse:
+        return Langfuse(
+            public_key=self.public_key,
+            secret_key=self.secret_key,
+            base_url=self.base_url,
+        )
 
 
 class ServiceConfig(BaseModel):
@@ -18,9 +35,19 @@ class ServiceConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     host: str
-    port: Annotated[int | None, Field(default=None)]
+    port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     model_name: str
-    api_key: str
+    api_key: SecretStr
+    temperature: Annotated[float, Field(default=0.0, ge=0.0, le=1.1)]
+
+    @cached_property
+    def llm(self) -> ChatOpenAI:
+        return ChatOpenAI(
+            base_url=self.url,
+            api_key=self.api_key,
+            model=self.model_name,
+            temperature=self.temperature,
+        )
 
     @property
     def url(self) -> str:
@@ -37,6 +64,7 @@ class LLMsTypes(BaseModel):
 class Settings(BaseSettings):
     service: ServiceConfig
     llm: LLMsTypes
+    langfuse: LangfuseConfig
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent / '.env',
@@ -45,6 +73,11 @@ class Settings(BaseSettings):
         case_sensitive=False,
         env_nested_delimiter='__',
     )
+
+    def model_post_init(self, __context) -> None:
+        _ = self.langfuse.client
+        _ = self.llm.orchestrator.llm
+        _ = self.llm.coder.llm
 
 
 settings = Settings()
