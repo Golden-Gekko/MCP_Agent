@@ -1,5 +1,4 @@
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from core import settings
 
@@ -18,9 +17,10 @@ def generate_code(task: str, code_context: str = '') -> str:
     prompt = (
         settings.langfuse.client
         .get_prompt(name='mcp_agent_coder_prompt')
-        .compile(code_context=code_context, task=task)
+        .compile(
+            code_context=code_context.strip() or 'Нет дополнительного контекста. Пиши самодостаточный код.',
+            task=task)
     )
-    logger.debug(prompt)
     response = settings.llm.coder.llm.invoke(prompt)
 
     content = response.content
