@@ -105,6 +105,7 @@ celerybeat.pid
 
 # Environments
 .env
+.langfuse.env
 .venv
 env/
 venv/
@@ -143,3 +144,6 @@ dmypy.json
 
 # Windows
 Thumbs.db
+nlp_models/
+report/
+test_dir/
