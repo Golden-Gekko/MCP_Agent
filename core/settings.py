@@ -57,12 +57,12 @@ class LLMConfig(BaseModel):
 
 
 class LLMsTypes(BaseModel):
-    orchestrator: LLMConfig
+    chat: LLMConfig
     coder: LLMConfig
 
 
 class Settings(BaseSettings):
-    service: ServiceConfig
+    service: ServiceConfig = Field(validation_alias='AGENT')
     llm: LLMsTypes
     langfuse: LangfuseConfig
 
@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context) -> None:
         _ = self.langfuse.client
-        _ = self.llm.orchestrator.llm
+        _ = self.llm.chat.llm
         _ = self.llm.coder.llm
 
 
