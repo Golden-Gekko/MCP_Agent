@@ -1,5 +1,12 @@
+from typing import Literal
+
 from langgraph.graph import MessagesState
 
 
 class AgentState(MessagesState):
-    pass
+    user_request: str
+    plan: list[str]
+    current_step: int
+    step_results: dict[int, str]
+    evaluation: Literal['pass', 'retry', 'fail']
+    retry_count: int
