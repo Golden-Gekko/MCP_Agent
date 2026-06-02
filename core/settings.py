@@ -1,4 +1,4 @@
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Annotated
 
@@ -81,5 +81,14 @@ class Settings(BaseSettings):
         _ = self.llm.coder.llm
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    try:
+        return Settings()
+    except Exception as e:
+        print(f'Ошибка создания Settings: {e}')
+        raise
+
+
+settings = get_settings()
 configure_logging(level=settings.service.loglevel, create_file=settings.service.log_to_file)

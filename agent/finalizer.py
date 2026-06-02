@@ -73,7 +73,7 @@ class FinalizerNode:
             plan=plan,
             steps_summary=steps_summary
         )
-        logger.info(f'FinalizerNode prompt_value: {prompt_value[:500]}')
+        logger.debug(f'FinalizerNode prompt_value: {prompt_value[:500]}')
 
         response = await self.llm.ainvoke([SystemMessage(content=prompt_value)])
         return {'messages': [AIMessage(content=response.content.strip())]}

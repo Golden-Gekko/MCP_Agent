@@ -4,6 +4,10 @@ COMPOSE_FILE := docker-compose.yml
 
 ARGS ?=
 
+WS ?= $(CURDIR)
+AGENT__WORKSPACE ?= $(WS)
+export AGENT__WORKSPACE
+
 up:
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d $(ARGS)
 down:

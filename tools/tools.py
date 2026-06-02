@@ -1,5 +1,6 @@
-from pathlib import Path
 import sys
+import os
+from pathlib import Path
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from loguru import logger
@@ -30,7 +31,10 @@ async def init_tools():
         'coder': {
             'command': sys.executable,
             'args': [str(Path(__file__).parent / 'coder_mcp.py')],
-            'env': {**common_env, 'PYTHONPATH': str(Path(__file__).parent.parent)},
+            'env': {
+                **common_env, 'PYTHONPATH': str(Path(__file__).parent.parent),
+                **os.environ.copy()
+            },
             'transport': 'stdio',
         }
     }
@@ -38,10 +42,7 @@ async def init_tools():
         mcp_config['git'] = {
             'command': 'uvx',
             'args': ['mcp-server-git', '--repository', str(workspace)],
-            'env': {
-                **common_env,
-                'UV_INDEX_URL': 'https://mirrors.cloud.tencent.com/pypi/simple/'
-            },
+            'env': {**common_env},
             'cwd': str(workspace),
             'transport': 'stdio',
         }

@@ -3,7 +3,7 @@ from loguru import logger
 from app import MCPCodingAgentApp
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         app = MCPCodingAgentApp()
         app.run()

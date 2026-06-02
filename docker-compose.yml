@@ -1,4 +1,30 @@
 services:
+  agent:
+    build: .
+    env_file:
+      - .env
+    environment:
+      LANGFUSE__BASE_URL: "http://langfuse-web:3000"
+      LLM__CHAT__HOST: sglang-chat
+      LLM__CHAT__PORT: 30000
+      LLM__CHAT__MODEL_NAME: ai-sage/GigaChat3-10B-A1.8B
+      LLM__CODER__HOST: sglang-code
+      LLM__CODER__PORT: 30000
+      LLM__CODER__MODEL_NAME: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
+      AGENT__WORKSPACE: /opt/app/workspace
+    ports:
+      - "8000:8000"
+    depends_on:
+      langfuse-worker:
+        condition: service_started
+      sglang-chat:
+        condition: service_healthy
+      sglang-code:
+        condition: service_healthy
+    volumes:
+      - ${AGENT__WORKSPACE}:/opt/app/workspace
+    networks:
+      - app_network
 # ================== LLM в SGLang==================
   sglang-chat:
     image: lmsysorg/sglang@sha256:7515a1e626d22a8582ad4478d3d68b294d2b484c78a023f8b61c6867454bbf4a
@@ -8,8 +34,6 @@ services:
       - .env
     shm_size: 32g
     ipc: host
-    ports:
-      - "30001:30000"
     deploy:
       resources:
         reservations:
@@ -44,8 +68,6 @@ services:
       - .env
     shm_size: 32g
     ipc: host
-    ports:
-      - "30002:30000"
     deploy:
       resources:
         reservations:
