@@ -1,6 +1,7 @@
 from loguru import logger
 
-from agent import MCPCodingAgentApp
+from app import MCPCodingAgentApp
+
 
 if __name__ == "__main__":
     try:

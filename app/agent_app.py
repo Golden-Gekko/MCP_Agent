@@ -1,10 +1,10 @@
 import asyncio
 
 import gradio as gr
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from loguru import logger
 
-from .graph import MCPAgent
+from agent import MCPAgent
 from core import settings
 
 
@@ -40,15 +40,13 @@ class MCPCodingAgentApp:
         if self.agent is None:
             logger.error('Агент не инициализирован')
             return 'Агент не инициализирован'
-    
+
         messages = []
         for msg in history:
             if msg['role'] == 'user':
                 messages.append(HumanMessage(content=msg['content']))
-            elif msg['role'] == 'assistant':
-                messages.append(AIMessage(content=msg['content']))
         messages.append(HumanMessage(content=message))
-    
+
         result = await self.agent.run({
             'messages': messages,
             'user_request': message,
