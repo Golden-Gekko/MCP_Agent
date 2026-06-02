@@ -1,25 +1,37 @@
+from langchain.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
+from langchain_core.prompts import PromptTemplate
+from loguru import logger
 
-from core import settings
+from utils.langfuse import load_prompt_from_langfuse
 
 from .state import AgentState
 
 
-def evaluator_node(state: AgentState) -> dict:
-    last_msg = state['messages'][-1]
-    result = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
-    prompt = (
-        settings.langfuse.client.get_prompt(name='mcp_agent_evaluator_prompt')
-        .compile(
+class EvaluatorNode:
+    def __init__(
+            self,
+            llm: BaseChatModel,
+            prompt_name: str = 'mcp_agent_evaluator_prompt',
+            prompt_label: str = 'production'
+    ):
+        self.llm = llm
+        self.prompt_template = PromptTemplate.from_template(
+            load_prompt_from_langfuse(prompt_name=prompt_name, prompt_label=prompt_label))
+        logger.debug(f'EvaluatorNode prompt_template: {self.prompt_template}')
+
+    async def node(self, state: AgentState) -> dict:
+        last_msg = state['messages'][-1]
+        result = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+        prompt_value = self.prompt_template.format(
             step_text=state['plan'][state['current_step']],
             step_result=result
-        ))
-    response = settings.llm.chat.llm.invoke([SystemMessage(content=prompt)])
-    eval_res = response.content.strip().lower()
+        )
+        logger.debug(f'EvaluatorNode prompt_value: {prompt_value}')
 
-    if eval_res in ['pass', 'retry', 'fail']:
-        step_results = state.get('step_results', {}).copy()
-        step_results[state['current_step']] = result[:1000]
-        return {'step_results': step_results, 'evaluation': eval_res}
+        response = await self.llm.ainvoke([SystemMessage(content=prompt_value)])
+        eval_res = response.content.strip().lower()
 
-    return {'evaluation': 'pass', 'error_log': [f'Evaluator вернул: {eval_res}']}
+        if any(keyword in eval_res for keyword in ['pass', 'retry', 'fail']):
+            return {'evaluation': next(kw for kw in ['pass', 'retry', 'fail'] if kw in eval_res)}
+        return {'evaluation': 'pass', 'error_log': [f'Evaluator вернул: {eval_res}']}

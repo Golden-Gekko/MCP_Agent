@@ -7,6 +7,5 @@ class AgentState(MessagesState):
     user_request: str
     plan: list[str]
     current_step: int
-    step_results: dict[int, str]
     evaluation: Literal['pass', 'retry', 'fail']
     retry_count: int

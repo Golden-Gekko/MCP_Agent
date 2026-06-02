@@ -1,25 +1,27 @@
 from typing import Any
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode
 from langfuse.langchain import CallbackHandler
 from loguru import logger
 
 from core import settings
 from tools import init_tools
 
+from .agent_node import AgentNode
+from .evaluator import EvaluatorNode
+from .finalizer import FinalizerNode
+from .planer import PlanerNode
 from .state import AgentState
 
 
 class MCPAgent:
     def __init__(self):
-        self.llm: ChatOpenAI = settings.llm.chat.llm
-        self.llm_with_tools = None
+        self.llm_with_tools: ChatOpenAI | None = None
         self.tools: list[BaseTool] | None = None
-        self.tool_node: ToolNode | None = None
         self.graph = None
         self.lf_handler = CallbackHandler(public_key=settings.langfuse.public_key)
 
@@ -29,20 +31,8 @@ class MCPAgent:
         except Exception as e:
             logger.error(f'Ошибка инициализации инструментов: {e}')
             raise
-        self.llm_with_tools = self.llm.bind_tools(self.tools, parallel_tool_calls=False)
-        self.tool_node = ToolNode(tools=self.tools)
+        self.llm_with_tools = settings.llm.chat.llm.bind_tools(self.tools, parallel_tool_calls=False)
         self.graph = self._compile_graph()
-
-    def agent_node(self, state: AgentState) -> dict[str, Any]:
-        prompt = settings.langfuse.client.get_prompt(name='mcp_agent_prompt').compile()
-        step_text = state['plan'][state['current_step']]
-        step_instruction = HumanMessage(
-            content=f"Текущий шаг: {step_text}\n"
-                    f"Контекст предыдущих шагов: {list(state['step_results'].values())[-2:]}"
-        )
-        messages = [SystemMessage(content=prompt), step_instruction]
-        response = self.llm_with_tools.ainvoke(messages)
-        return {'messages': [response]}
 
     @staticmethod
     def step_router(state: AgentState) -> str:
@@ -55,37 +45,51 @@ class MCPAgent:
     def eval_router(state: AgentState) -> str:
         ev = state.get('evaluation', 'pass')
         retries = state.get('retry_count', 0)
-        if ev == 'pass':
-            return 'increment_step'
-        elif ev == 'retry' and retries < 2:
+        if ev == 'retry' and retries < settings.service.max_retries:
             return 'retry_step'
+        idx = state['current_step'] + 1
+        if ev == 'pass' and idx < len(state['plan']):
+            return 'increment_step'
         return 'finalize'
 
     @staticmethod
     def increment_step(state: AgentState) -> dict[str, Any]:
-        idx = state['current_step'] + 1
         return {
-            'current_step': idx,
-            'retry_count': 0,
-            'messages': []}
+            'current_step': state['current_step'] + 1,
+            'retry_count': 0}
 
     @staticmethod
     def retry_step(state: AgentState) -> dict[str, Any]:
-        return {
-            'retry_count': state.get('retry_count', 0) + 1,
-            'messages': []}
+        return {'retry_count': state.get('retry_count', 0) + 1}
 
     def _compile_graph(self):
         workflow = StateGraph(AgentState)
-        workflow.add_node('agent', self.agent_node)
-        workflow.add_node('tools', self.tool_node)
 
-        workflow.set_entry_point('agent')
+        workflow.add_node('agent_node', AgentNode(llm=self.llm_with_tools).node)
+        workflow.add_node('evaluator', EvaluatorNode(llm=settings.llm.chat.llm).node)
+        workflow.add_node('finalizer', FinalizerNode(llm=settings.llm.chat.llm).node)
+        workflow.add_node('planer', PlanerNode(llm=settings.llm.chat.llm).node)
+
+        workflow.add_node('increment_step', self.increment_step)
+        workflow.add_node('retry_step', self.retry_step)
+        workflow.add_node('tools', ToolNode(self.tools))
+
+        workflow.set_entry_point('planer')
+        workflow.add_edge('planer', 'agent_node')
         workflow.add_conditional_edges(
-            'agent', tools_condition,
-            {'tools': 'tools', '__end__': '__end__'})
-        workflow.add_edge('tools', 'agent')
-
+            'agent_node', self.step_router,
+            {'tools': 'tools', 'evaluate': 'evaluator'})
+        workflow.add_edge('tools', 'agent_node')
+        workflow.add_conditional_edges(
+            'evaluator', self.eval_router,
+            {
+                'increment_step': 'increment_step',
+                'retry_step': 'retry_step',
+                'finalize': 'finalizer'
+            })
+        workflow.add_edge('increment_step', 'agent_node')
+        workflow.add_edge('retry_step', 'agent_node')
+        workflow.set_finish_point('finalizer')
         graph = workflow.compile()
         return graph
 

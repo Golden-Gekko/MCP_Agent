@@ -49,7 +49,10 @@ class MCPCodingAgentApp:
                 messages.append(AIMessage(content=msg['content']))
         messages.append(HumanMessage(content=message))
     
-        result = await self.agent.run({'messages': messages})
+        result = await self.agent.run({
+            'messages': messages,
+            'user_request': message,
+        })
         return result[-1].content
 
     async def initialize_and_launch(self):

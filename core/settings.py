@@ -31,6 +31,7 @@ class ServiceConfig(BaseModel):
     loglevel: str
     log_to_file: bool
     context7_api_key: str
+    max_retries: int = 2
 
 
 class LLMConfig(BaseModel):
