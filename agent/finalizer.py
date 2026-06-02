@@ -20,20 +20,60 @@ class FinalizerNode:
             load_prompt_from_langfuse(prompt_name=prompt_name, prompt_label=prompt_label))
         logger.debug(f'FinalizerNode prompt_template: {self.prompt_template}')
 
-    async def node(self, state: AgentState) -> dict:
-        plan = '\n'.join(state.get('plan', []))
+    @staticmethod
+    def _extract_text(content) -> str:
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get('type') == 'text':
+                    parts.append(block.get('text', ''))
+                elif isinstance(block, str):
+                    parts.append(block)
+            return '\n'.join(p for p in parts if p).strip()
+        return str(content).strip()
 
-        steps_summary = []
-        for i, res in enumerate(state['messages'], start=1):
-            if res.type == 'ai':
-                steps_summary.append(f'* Шаг {i}: {res.content}')
+    def _build_steps_summary(self, messages: list) -> str:
+        tool_index = {
+            m.tool_call_id: m
+            for m in messages
+            if getattr(m, 'type', None) == 'tool' and getattr(m, 'tool_call_id', None)
+        }
+
+        lines = []
+        for msg in messages:
+            if getattr(msg, 'type', None) != 'ai':
+                continue
+
+            text = self._extract_text(msg.content)
+            if text:
+                lines.append(f'Ответ агента: {text}')
+                continue
+
+            tool_calls = getattr(msg, 'tool_calls', None) or []
+            for tc in tool_calls:
+                tc_id = tc.get('id')
+                tool_name = tc.get('name', 'unknown')
+
+                tool_msg = tool_index.get(tc_id)
+                if tool_msg is not None:
+                    result = self._extract_text(tool_msg.content)
+                    if len(result) > 2000:
+                        result = result[:2000] + '... (обрезано)'
+                    lines.append(f'Вызов инструмента "{tool_name}". Результат: {result}')
+        return '\n\n'.join(lines) if lines else '(история выполнения пуста)'
+
+    async def node(self, state: AgentState) -> dict:
+        plan = '\n'.join(f"{i}. {s}" for i, s in enumerate(state.get('plan', []), start=1))
+        steps_summary = self._build_steps_summary(state['messages'])
 
         prompt_value = self.prompt_template.format(
-            user_request=state.get(key='user_request', default='Без запроса'),
+            user_request=state.get('user_request', 'Без запроса'),
             plan=plan,
-            steps_summary='\n'.join(steps_summary)
+            steps_summary=steps_summary
         )
-        logger.debug(f'FinalizerNode prompt_value: {prompt_value}')
+        logger.info(f'FinalizerNode prompt_value: {prompt_value[:500]}')
 
         response = await self.llm.ainvoke([SystemMessage(content=prompt_value)])
         return {'messages': [AIMessage(content=response.content.strip())]}

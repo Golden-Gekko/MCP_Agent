@@ -9,3 +9,4 @@ class AgentState(MessagesState):
     current_step: int
     evaluation: Literal['pass', 'retry', 'fail']
     retry_count: int
+    error_log: list[str]

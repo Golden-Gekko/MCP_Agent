@@ -1,5 +1,5 @@
 from langchain.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from loguru import logger
 
 from utils.langfuse import load_prompt_from_langfuse
@@ -20,8 +20,11 @@ class AgentNode:
 
     async def node(self, state: AgentState) -> dict:
         step_text = state['plan'][state['current_step']]
-        messages = state['messages'] + [
-            SystemMessage(content=self.prompt), HumanMessage(content=f'ТЕКУШИЙ ШАГ: {step_text}')]
-
-        response = await self.llm.ainvoke(messages)
+        prompt_with_history = ChatPromptTemplate.from_messages([
+            ('system', self.prompt),
+            ('human', f'ТЕКУШИЙ ШАГ: {step_text}'),
+            MessagesPlaceholder(variable_name='messages'),
+        ])
+        chain = prompt_with_history | self.llm
+        response = chain.invoke({'messages': state['messages']})
         return {'messages': [response]}

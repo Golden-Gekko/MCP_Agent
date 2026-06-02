@@ -1,1 +1,1 @@
-from .agent_app import MCPCodingAgentApp
+from .graph import MCPAgent
