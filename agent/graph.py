@@ -7,7 +7,6 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langfuse.langchain import CallbackHandler
-from loguru import logger
 
 from core import settings
 from tools import init_tools
@@ -18,18 +17,12 @@ class MCPAgent:
         self.llm: ChatOpenAI = settings.llm.chat.llm
         self.llm_with_tools = None
         self.tools: list[BaseTool] | None = None
-        self.tool_node: ToolNode | None = None
         self.graph = None
         self.lf_handler = CallbackHandler(public_key=settings.langfuse.public_key)
 
     async def init_graph(self):
-        try:
-            self.tools = await init_tools()
-        except Exception as e:
-            logger.error(f'Ошибка инициализации инструментов: {e}')
-            raise
+        self.tools = await init_tools()
         self.llm_with_tools = self.llm.bind_tools(self.tools, parallel_tool_calls=False)
-        self.tool_node = ToolNode(tools=self.tools)
         self.graph = self._compile_graph()
 
     def agent_node(self, state: MessagesState) -> dict[str, Any]:
@@ -45,7 +38,7 @@ class MCPAgent:
     def _compile_graph(self):
         workflow = StateGraph(MessagesState)
         workflow.add_node('agent', self.agent_node)
-        workflow.add_node('tools', self.tool_node)
+        workflow.add_node('tools', ToolNode(tools=self.tools))
 
         workflow.set_entry_point('agent')
         workflow.add_conditional_edges(
