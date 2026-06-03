@@ -14,12 +14,9 @@ class MCPCodingAgentApp:
         self.agent = None
 
     async def init_agent(self):
-        try:
-            self.agent = MCPAgent()
-            await self.agent.init_graph()
-            logger.success('MCP агент инициализирован')
-        except Exception as e:
-            logger.error(e)
+        self.agent = MCPAgent()
+        await self.agent.init_graph()
+        logger.success('MCP агент инициализирован')
 
     def build_interface(self):
         with gr.Blocks(title='MCP Coding Agent', fill_height=True) as self.demo:
