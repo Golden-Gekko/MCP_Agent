@@ -21,11 +21,10 @@ class EvaluatorNode:
         logger.debug(f'EvaluatorNode prompt_template: {self.prompt_template}')
 
     async def node(self, state: AgentState) -> dict:
-        last_msg = state['messages'][-1]
-        result = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+        step_result = state.get('step_content', '')
         prompt_value = self.prompt_template.format(
             step_text=state['plan'][state['current_step']],
-            step_result=result
+            step_result=step_result
         )
         logger.debug(f'EvaluatorNode prompt_value: {prompt_value}')
 

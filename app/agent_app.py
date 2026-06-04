@@ -45,7 +45,7 @@ class MCPCodingAgentApp:
         messages.append(HumanMessage(content=message))
 
         result = await self.agent.run({
-            'messages': messages,
+            # 'messages': messages,
             'user_request': message,
         })
         return result[-1].content

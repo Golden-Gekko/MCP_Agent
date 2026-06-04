@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Any
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, RemoveMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import ToolNode
 from langfuse.langchain import CallbackHandler
 from loguru import logger
@@ -13,6 +14,7 @@ from core import settings
 from tools import init_tools
 
 from .agent_node import AgentNode
+from .compressor import ContextCompressorNode
 from .evaluator import EvaluatorNode
 from .finalizer import FinalizerNode
 from .planer import PlanerNode
@@ -38,10 +40,12 @@ class MCPAgent:
 
     @staticmethod
     def step_router(state: AgentState) -> str:
+        if len(state['messages']) == 0:
+            return 'error'
         last_msg = state['messages'][-1]
         if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
             return 'tools'
-        return 'evaluate'
+        return 'compress'
 
     @staticmethod
     def eval_router(state: AgentState) -> str:
@@ -56,9 +60,17 @@ class MCPAgent:
 
     @staticmethod
     def increment_step(state: AgentState) -> dict[str, Any]:
+        state['history'] = state.get('history', []) + [state.get('step_content', '')]
+        messages = [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            *[AIMessage(content=h) for h in state['history']]
+        ]
         return {
+            'history': state['history'],
+            'messages': messages,
             'current_step': state['current_step'] + 1,
-            'retry_count': 0}
+            'retry_count': 0
+        }
 
     @staticmethod
     def retry_step(state: AgentState) -> dict[str, Any]:
@@ -68,6 +80,7 @@ class MCPAgent:
         workflow = StateGraph(AgentState)
 
         workflow.add_node('agent_node', AgentNode(llm=self.llm_with_tools).node)
+        workflow.add_node('compressor', ContextCompressorNode().node)
         workflow.add_node('evaluator', EvaluatorNode(llm=settings.llm.chat.llm).node)
         workflow.add_node('finalizer', FinalizerNode(llm=settings.llm.chat.llm).node)
         workflow.add_node('planer', PlanerNode(llm=settings.llm.chat.llm).node)
@@ -80,8 +93,13 @@ class MCPAgent:
         workflow.add_edge('planer', 'agent_node')
         workflow.add_conditional_edges(
             'agent_node', self.step_router,
-            {'tools': 'tools', 'evaluate': 'evaluator'})
+            {
+                'tools': 'tools',
+                'compress': 'compressor',
+                'error': 'finalizer',
+            })
         workflow.add_edge('tools', 'agent_node')
+        workflow.add_edge('compressor', 'evaluator')
         workflow.add_conditional_edges(
             'evaluator', self.eval_router,
             {
