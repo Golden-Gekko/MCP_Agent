@@ -29,7 +29,7 @@ class FinalizerNode:
             f'Результаты выполнения:\n{steps_summary}\n\n'
             f'Сформируй итоговый ответ для пользователя.')
 
-        logger.info(f'FinalizerNode message: {msg[:500]}')
+        logger.debug(f'FinalizerNode message: {msg[:500]}')
 
         response = await self.llm.ainvoke([
             SystemMessage(content=self.prompt),

@@ -40,7 +40,7 @@ class AgentNode:
         prompt_with_history = ChatPromptTemplate.from_messages([
             ('system', self.prompt),
             ('human', f"Запрос пользователя: {state['user_request']}"),
-            ('human', f"ТЕКУШИЙ ШАГ {state['current_step'] + 1}: {step_text}"),
+            ('human', f"ТЕКУЩИЙ ШАГ, КОТОРЫЙ НУЖНО ВЫПОЛНИТЬ: {step_text}"),
             MessagesPlaceholder(variable_name='messages'),
         ])
         chain = prompt_with_history | self.llm
@@ -48,13 +48,13 @@ class AgentNode:
 
         retry = 0
 
-        while not self._validate_and_parse_tool_calls(response) and retry < settings.service.max_retries:
-            messages = state['messages'] + [
-                response,
-                HumanMessage(load_prompt_from_langfuse('mcp_agent_error_tool_call_prompt'))
-            ]
-            response = chain.invoke({'messages': messages})
-            retry += 1
+        # while not self._validate_and_parse_tool_calls(response) and retry < settings.service.max_retries:
+        #     messages = state['messages'] + [
+        #         response,
+        #         HumanMessage(load_prompt_from_langfuse('mcp_agent_error_tool_call_prompt'))
+        #     ]
+        #     response = chain.invoke({'messages': messages})
+        #     retry += 1
         return {'messages': [response], 'step_iteration': state.get('step_iteration', 0) + 1}
 
     @staticmethod

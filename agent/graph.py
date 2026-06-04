@@ -54,7 +54,7 @@ class MCPAgent:
         if ev == 'retry' and retries < settings.service.max_retries:
             return 'retry_step'
         idx = state['current_step'] + 1
-        if ev == 'pass' and idx < len(state['plan']):
+        if idx < len(state['plan']):
             return 'increment_step'
         return 'finalize'
 
