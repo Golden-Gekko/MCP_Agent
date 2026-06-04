@@ -1,5 +1,5 @@
 from langchain.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from loguru import logger
 
@@ -16,9 +16,9 @@ class FinalizerNode:
             prompt_label: str = 'production'
     ):
         self.llm = llm
-        self.prompt_template = PromptTemplate.from_template(
-            load_prompt_from_langfuse(prompt_name=prompt_name, prompt_label=prompt_label))
-        logger.debug(f'FinalizerNode prompt_template: {self.prompt_template}')
+
+        self.prompt = load_prompt_from_langfuse(prompt_name=prompt_name, prompt_label=prompt_label)
+        logger.debug(f'FinalizerNode prompt: {self.prompt}')
 
     @staticmethod
     def _extract_text(content) -> str:
@@ -48,7 +48,7 @@ class FinalizerNode:
 
             text = self._extract_text(msg.content)
             if text:
-                lines.append(f'Ответ агента: {text}')
+                lines.append(f'[ОТВЕТ АГЕНТА]: {text}')
                 continue
 
             tool_calls = getattr(msg, 'tool_calls', None) or []
@@ -59,21 +59,25 @@ class FinalizerNode:
                 tool_msg = tool_index.get(tc_id)
                 if tool_msg is not None:
                     result = self._extract_text(tool_msg.content)
-                    if len(result) > 2000:
-                        result = result[:2000] + '... (обрезано)'
-                    lines.append(f'Вызов инструмента "{tool_name}". Результат: {result}')
+                    if len(result) > 1500:
+                        result = result[:1500] + '... [данные обрезаны]'
+                    lines.append(f'[ИНСТРУМЕНТ] "{tool_name}". Результат: {result}')
         return '\n\n'.join(lines) if lines else '(история выполнения пуста)'
 
     async def node(self, state: AgentState) -> dict:
         plan = '\n'.join(f"{i}. {s}" for i, s in enumerate(state.get('plan', []), start=1))
         steps_summary = self._build_steps_summary(state['messages'])
 
-        prompt_value = self.prompt_template.format(
-            user_request=state.get('user_request', 'Без запроса'),
-            plan=plan,
-            steps_summary=steps_summary
-        )
-        logger.debug(f'FinalizerNode prompt_value: {prompt_value[:500]}')
+        msg = (
+            f'Запрос пользователя: {state["user_request"]}\n\n'
+            f'План: {plan}\n\n'
+            f'Результаты выполнения: {steps_summary}\n\n'
+            f'Сформируй итоговый ответ для пользователя.')
 
-        response = await self.llm.ainvoke([SystemMessage(content=prompt_value)])
+        logger.info(f'FinalizerNode message: {msg[:500]}')
+
+        response = await self.llm.ainvoke([
+            SystemMessage(content=self.prompt),
+            HumanMessage(content=msg),
+        ])
         return {'messages': [AIMessage(content=response.content.strip())]}

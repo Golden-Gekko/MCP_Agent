@@ -6,20 +6,18 @@ mcp = FastMCP('coder')
 
 
 @mcp.tool()
-def generate_code(task: str, code_context: str = '') -> str:
+def generate_code(task: str, code_context: str) -> str:
     """Генерирует код по заданию пользователя.
     Args:
         task: Краткое описание задачи (например, "напиши функцию factorial с кэшированием")
-        code_context: Опциональный контекст — содержимое других файлов для учёта стиля/зависимостей
+        code_context: Содержимое файлов, которые нужно изменить или которые влияют на задачу. ВСЕГДА заполняй этот параметр, если задача касается существующего кода. Если код пишется с нуля и файлов нет, напиши "Нет контекста".
     Returns:
         Сгенерированный код
     """
     prompt = (
         settings.langfuse.client
         .get_prompt(name='mcp_agent_coder_prompt')
-        .compile(
-            code_context=code_context.strip() or 'Нет дополнительного контекста. Пиши самодостаточный код.',
-            task=task)
+        .compile(code_context=code_context.strip(), task=task)
     )
     response = settings.llm.coder.llm.invoke(prompt)
 

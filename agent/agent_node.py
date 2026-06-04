@@ -2,7 +2,6 @@ from langchain.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from loguru import logger
-from pyexpat.errors import messages
 
 from utils.langfuse import load_prompt_from_langfuse
 

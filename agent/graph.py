@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from langchain_core.messages import BaseMessage
@@ -24,6 +25,7 @@ class MCPAgent:
         self.tools: list[BaseTool] | None = None
         self.graph = None
         self.lf_handler = CallbackHandler(public_key=settings.langfuse.public_key)
+        self.init_time = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     async def init_graph(self):
         try:
@@ -98,5 +100,12 @@ class MCPAgent:
             raise RuntimeError(
                 'Агент не инициализирован. Запустите `initialize()`.')
         return (
-            await self.graph.ainvoke(input_messages, config={'callbacks': [self.lf_handler]})
+            await self.graph.ainvoke(
+                input_messages,
+                config={
+                    'callbacks': [self.lf_handler],
+                    'metadata': {
+                        'langfuse_session_id': f'docker_session_{self.init_time}',
+                    }
+                })
         )['messages']
