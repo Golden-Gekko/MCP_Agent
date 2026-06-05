@@ -124,7 +124,7 @@ services:
       - app_network
 
   langfuse-minio:
-    image: cgr.dev/chainguard/minio@sha256:a342898b433b4df054f20209980e58607f90a6ead4993424832597c65371648a
+    image: chainguard/minio@sha256:a342898b433b4df054f20209980e58607f90a6ead4993424832597c65371648a
     restart: always
     entrypoint: sh
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
