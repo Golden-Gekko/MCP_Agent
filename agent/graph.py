@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, RemoveMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import ToolNode
@@ -26,6 +27,7 @@ class MCPAgent:
         self.llm_with_tools: ChatOpenAI | None = None
         self.tools: list[BaseTool] | None = None
         self.graph = None
+        self.checkpointer = InMemorySaver()
         self.lf_handler = CallbackHandler(public_key=settings.langfuse.public_key)
         self.init_time = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -37,6 +39,19 @@ class MCPAgent:
             raise
         self.llm_with_tools = settings.llm.chat.llm.bind_tools(self.tools, parallel_tool_calls=False)
         self.graph = self._compile_graph()
+
+    @staticmethod
+    def need_adjust_plan(state: AgentState) -> Literal['agent_node', 'planer']:
+        logger.info(state['user_request'])
+        logger.info(state['user_request'].lower())
+        logger.info('продолжить' in state['user_request'].lower())
+
+        if 'продолжить' in state['user_request'].lower():
+            logger.info('THIS IS IFFFF')
+
+            return 'agent_node'
+        logger.info('NOT IF')
+        return 'planer'
 
     @staticmethod
     def step_router(state: AgentState) -> str:
@@ -90,40 +105,49 @@ class MCPAgent:
         workflow.add_node('tools', ToolNode(self.tools))
 
         workflow.set_entry_point('planer')
-        workflow.add_edge('planer', 'agent_node')
-        workflow.add_conditional_edges(
-            'agent_node', self.step_router,
-            {
-                'tools': 'tools',
-                'compress': 'compressor',
-                'error': 'finalizer',
-            })
-        workflow.add_edge('tools', 'agent_node')
-        workflow.add_edge('compressor', 'evaluator')
-        workflow.add_conditional_edges(
-            'evaluator', self.eval_router,
-            {
-                'increment_step': 'increment_step',
-                'retry_step': 'retry_step',
-                'finalize': 'finalizer'
-            })
-        workflow.add_edge('increment_step', 'agent_node')
-        workflow.add_edge('retry_step', 'agent_node')
-        workflow.set_finish_point('finalizer')
-        graph = workflow.compile()
+        workflow.add_conditional_edges(source='planer', path=self.need_adjust_plan)
+
+        workflow.set_finish_point('agent_node')
+        # workflow.add_edge('planer', 'agent_node')
+        # workflow.add_conditional_edges(
+        #     'agent_node', self.step_router,
+        #     {
+        #         'tools': 'tools',
+        #         'compress': 'compressor',
+        #         'error': 'finalizer',
+        #     })
+        # workflow.add_edge('tools', 'agent_node')
+        # workflow.add_edge('compressor', 'evaluator')
+        # workflow.add_conditional_edges(
+        #     'evaluator', self.eval_router,
+        #     {
+        #         'increment_step': 'increment_step',
+        #         'retry_step': 'retry_step',
+        #         'finalize': 'finalizer'
+        #     })
+        # workflow.add_edge('increment_step', 'agent_node')
+        # workflow.add_edge('retry_step', 'agent_node')
+        # workflow.set_finish_point('finalizer')
+        graph = workflow.compile(
+            checkpointer=self.checkpointer,
+            interrupt_after=['planer']
+        )
         return graph
 
-    async def run(self, input_messages: dict[str, Any]) -> list[BaseMessage]:
+    async def run(
+            self,
+            input_messages: dict[str, Any],
+            config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if self.graph is None:
             raise RuntimeError(
                 'Агент не инициализирован. Запустите `initialize()`.')
-        return (
-            await self.graph.ainvoke(
-                input_messages,
-                config={
-                    'callbacks': [self.lf_handler],
-                    'metadata': {
-                        'langfuse_session_id': f'docker_session_{self.init_time}',
-                    }
-                })
-        )['messages']
+        (config or {}).update({
+            'callbacks': [self.lf_handler],
+            'metadata': {'langfuse_session_id': f'docker_session_{self.init_time}'}
+        })
+        result = await self.graph.ainvoke(input_messages, config=config)
+        return {
+            'messages': result['messages'],
+            'phase': result['phase']
+        }

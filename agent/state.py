@@ -1,15 +1,28 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from langgraph.graph import MessagesState
+from pydantic import BaseModel, Field
+
+
+class PlanItem(BaseModel):
+    description: Annotated[
+        str, Field(description='Подробное описание шага, который нужно сделать')]
+    done: Annotated[bool, Field(default=False, description='Статус выполнения')]
+
+
+class Workflow(BaseModel):
+    plan: Annotated[list[PlanItem], Field(description='Список шагов для выполнения задачи')]
 
 
 class AgentState(MessagesState):
     user_request: str
-    plan: list[str]
-    step_content: str
-    history: list[str]
+    plan: list[dict]
     current_step: int
     step_iteration: int
+    step_content: str
+    history: list[str]
+    phase: Literal['planning', 'executing', 'done']
+
     evaluation: Literal['pass', 'retry', 'fail']
     retry_count: int
     error_log: list[str]

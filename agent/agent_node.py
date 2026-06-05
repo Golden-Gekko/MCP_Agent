@@ -26,6 +26,10 @@ class AgentNode:
         logger.debug(f'AgentNode prompt: {self.prompt}')
 
     async def node(self, state: AgentState) -> dict:
+        return {
+            'messages': AIMessage(content='Привет из AgentNode'),
+            'phase': 'executing',
+        }
         if state.get('step_iteration', 0) > settings.service.max_step_iterations:
             msg = 'КРИТИЧЕСКАЯ ОШИБКА! Агент зациклился и был сброшен в начальное состояние!'
             logger.error(msg)
