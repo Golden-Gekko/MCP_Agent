@@ -19,10 +19,6 @@ class AgentState(MessagesState):
     plan: list[dict]
     current_step: int
     step_iteration: int
-    step_content: str
     history: list[str]
     phase: Literal['planning', 'executing', 'done']
-
-    evaluation: Literal['pass', 'retry', 'fail']
-    retry_count: int
-    error_log: list[str]
+    is_approved: bool

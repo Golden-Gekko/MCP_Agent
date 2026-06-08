@@ -44,5 +44,6 @@ class ContextCompressorNode:
     def node(self, state: AgentState) -> dict:
         steps_summary = self._build_steps_summary(state['messages'])
         step = state['current_step']
-        step_content = f"[РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ ШАГА {step + 1}] {state['plan'][step]}.\n\n{steps_summary}"
-        return {'step_content': step_content, 'step_iteration': 0}
+        history = state.get('history', []) + [
+            f"[РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ ШАГА {step + 1}] {state['plan'][step]}.\n\n{steps_summary}"]
+        return {'history': history}

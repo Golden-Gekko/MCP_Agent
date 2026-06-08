@@ -1,5 +1,5 @@
 from langchain.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from utils.langfuse import load_prompt_from_langfuse
@@ -24,7 +24,6 @@ class FinalizerNode:
         steps_summary = '\n\n'.join(state.get('history', []))
 
         msg = (
-            f'Запрос пользователя: {state["user_request"]}\n\n'
             f'План: \n{plan}\n\n'
             f'Результаты выполнения:\n{steps_summary}\n\n'
             f'Сформируй итоговый ответ для пользователя.')
@@ -35,4 +34,8 @@ class FinalizerNode:
             SystemMessage(content=self.prompt),
             HumanMessage(content=msg),
         ])
-        return {'messages': [AIMessage(content=response.content.strip())]}
+        return {
+            'messages': [response],
+            'phase': 'done',
+            'is_approved': False,
+        }

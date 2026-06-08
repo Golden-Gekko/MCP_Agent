@@ -19,7 +19,7 @@ class PlanerNode:
         logger.debug(f'PlanerNode prompt: {self.prompt}')
 
     async def node(self, state: AgentState) -> dict:
-        logger.info(f'PlanerNode state: {state}')
+        logger.debug(f'PlanerNode state: {state}')
         response: Workflow = await self.llm.ainvoke(
             [SystemMessage(content=self.prompt)] +
             state['messages'] +
@@ -38,4 +38,5 @@ class PlanerNode:
             'plan': plan,
             'current_step': 0,
             'phase': 'planning',
+            'is_approved': False,
         }
