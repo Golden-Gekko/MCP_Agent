@@ -16,9 +16,11 @@ class Workflow(BaseModel):
 
 class AgentState(MessagesState):
     user_request: str
+    user_input: str
     plan: list[dict]
     current_step: int
     step_iteration: int
     history: list[str]
     phase: Literal['planning', 'executing', 'done']
     is_approved: bool
+    trace_id: str

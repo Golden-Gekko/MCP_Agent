@@ -23,17 +23,19 @@ class PlanerNode:
         response: Workflow = await self.llm.ainvoke(
             [SystemMessage(content=self.prompt)] +
             state['messages'] +
-            [HumanMessage(content=state.get('user_request', ''))]
+            [HumanMessage(content=state.get('user_input', ''))]
         )
 
         plan = [{**item.model_dump(), 'done': False} for item in response.plan]
-        message = 'Проверьте план действий. Подтвердите план словом "Продолжить" либо внесите корректировки'
+        message = (
+            'Проверьте план действий. '
+            'Подтвердите план словом **"Продолжить"** либо внесите корректировки')
         for i, item in enumerate(plan, start=1):
             message += f"\n* Шаг {i}: {item.get('description', 'Ошибка получения шага')}"
 
         return {
             'messages': [
-                HumanMessage(content=state.get('user_request', '')),
+                HumanMessage(content=state.get('user_input', '')),
                 AIMessage(content=message)],
             'plan': plan,
             'current_step': 0,
