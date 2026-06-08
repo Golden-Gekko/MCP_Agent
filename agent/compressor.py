@@ -46,4 +46,4 @@ class ContextCompressorNode:
         step = state['current_step']
         history = state.get('history', []) + [
             f"[РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ ШАГА {step + 1}] {state['plan'][step]}.\n\n{steps_summary}"]
-        return {'history': history}
+        return {'history': history, 'current_step': step + 1}
