@@ -29,63 +29,57 @@ class AgentNode:
             msg = 'КРИТИЧЕСКАЯ ОШИБКА! Агент зациклился и был сброшен в начальное состояние!'
             logger.error(msg)
             return {
-                'messages': [RemoveMessage(id=REMOVE_ALL_MESSAGES)],
+                'messages': [RemoveMessage(id=REMOVE_ALL_MESSAGES), AIMessage(msg)],
                 'history': [],
                 'current_step': 0,
             }
 
-        step_text = state['plan'][state['current_step']]
-        messages = (
-            [SystemMessage(self.prompt)] +
-            state['messages'] +
-            [HumanMessage(f'ТЕКУЩИЙ ШАГ, КОТОРЫЙ НУЖНО ВЫПОЛНИТЬ: {step_text}')]
-        )
-
-        if state['user_request']:
-            messages += [HumanMessage(state['user_request'])]
-
+        messages = [SystemMessage(self.prompt)] + state['messages']
+        if state['user_input']:
+            messages += [HumanMessage(state['user_input'])]
         response = await self.llm.ainvoke(messages)
 
-        # retry = 0
-        # while not self._validate_and_parse_tool_calls(response) and retry < settings.service.max_retries:
-        #     messages = state['messages'] + [
-        #         response,
-        #         HumanMessage(load_prompt_from_langfuse('mcp_agent_error_tool_call_prompt'))
-        #     ]
-        #     response = chain.invoke({'messages': messages})
-        #     retry += 1
+        message = self._validate_and_parse_tool_calls(response)
+        if not message.tool_calls:
+            step_text = state['plan'][state['current_step']]['description']
+            message = AIMessage(
+                f'Шаг "{step_text}" выполнен. '
+                'Подтвердите выполнение словом **"Продолжить"** либо внесите корректировки:\n\n'
+                f'ОТВЕТ АГЕНТА:\n{response.content}')
+
         return {
-            'messages': [HumanMessage(state['user_request']), response],
+            'messages': [HumanMessage(state['user_request']), message] if state['user_input'] else [message],
             'step_iteration': state.get('step_iteration', 0) + 1,
             'phase': 'executing',
             'is_approved': False,
         }
 
     @staticmethod
-    def _validate_and_parse_tool_calls(message: AIMessage) -> bool:
-        if message.tool_calls:
-            return True
-        if message.response_metadata.get('finish_reason') == 'tool_calls':
-            json_match = re.search(r'\{.*\}', message.content, re.DOTALL)
+    def _validate_and_parse_tool_calls(message: AIMessage) -> AIMessage:
+        if message.tool_calls or message.response_metadata.get('finish_reason') != 'tool_calls':
+            return message
 
-            if json_match:
-                raw_json_str = json_match.group()
-                try:
-                    raw_data = json.loads(raw_json_str)
-                except json.JSONDecodeError as je:
-                    logger.warning(f'Ошибка парсинга: {je}. Попытка восстановить')
-                    try:
-                        raw_data = json.loads(repair_json(raw_json_str, skip_json_loads=True))
-                    except Exception as e:
-                        logger.error(f'Не удалось восстановить JSON через json-repair: {e}')
-                        return False
-                if isinstance(raw_data, dict) and 'name' in raw_data and 'arguments' in raw_data:
-                    logger.info(f"Успешно извлечен tool_call: {raw_data['name']}")
-                    message.tool_calls = [{
-                        'name': raw_data['name'],
-                        'args': raw_data['arguments'],
-                        'id': f"call_{hash(raw_data['name'])}"
-                    }]
-                    message.content = ""
-                    return True
-        return False
+        json_match = re.search(r'\{.*\}', message.content, re.DOTALL)
+        if not json_match:
+            return message
+
+        raw_json_str = json_match.group()
+        try:
+            raw_data = json.loads(raw_json_str)
+        except json.JSONDecodeError as je:
+            logger.warning(f'Ошибка парсинга: {je}. Попытка восстановить')
+            try:
+                raw_data = json.loads(repair_json(raw_json_str, skip_json_loads=True))
+            except Exception as e:
+                logger.error(f'Не удалось восстановить JSON через json-repair: {e}')
+                return message
+        if isinstance(raw_data, dict) and 'name' in raw_data and 'arguments' in raw_data:
+            logger.info(f"Успешно извлечен tool_call: {raw_data['name']}")
+            logger.success(raw_data)
+            message.tool_calls = [{
+                'name': raw_data['name'],
+                'args': raw_data['arguments'],
+                'id': f"call_{hash(raw_data['name'])}"
+            }]
+            message.content = ''
+        return message
