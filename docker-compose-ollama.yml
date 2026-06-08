@@ -5,93 +5,23 @@ services:
       - .env
     environment:
       LANGFUSE__BASE_URL: "http://langfuse-web:3000"
-      LLM__CHAT__HOST: sglang-chat
-      LLM__CHAT__PORT: 30000
-      LLM__CHAT__MODEL_NAME: ai-sage/GigaChat3-10B-A1.8B
-      LLM__CODER__HOST: sglang-code
-      LLM__CODER__PORT: 30000
-      LLM__CODER__MODEL_NAME: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
+      LLM__CHAT__HOST: host.docker.internal
+      LLM__CHAT__PORT: 11434
+      LLM__CHAT__MODEL_NAME: qwen3.5:9b
+      LLM__CODER__HOST: host.docker.internal
+      LLM__CODER__PORT: 11434
+      LLM__CODER__MODEL_NAME: llama3.1:8b
       AGENT__WORKSPACE: /opt/app/workspace
     ports:
       - "8000:8000"
     depends_on:
       langfuse-worker:
         condition: service_started
-      sglang-chat:
-        condition: service_healthy
-      sglang-code:
-        condition: service_healthy
     volumes:
       - ${AGENT__WORKSPACE}:/opt/app/workspace
     networks:
       - app_network
-# ================== LLM в SGLang==================
-  sglang-chat:
-    image: lmsysorg/sglang@sha256:7515a1e626d22a8582ad4478d3d68b294d2b484c78a023f8b61c6867454bbf4a
-    volumes:
-      - ./nlp_models/sglang_cache/huggingface:/root/.cache/huggingface
-    env_file:
-      - .env
-    shm_size: 32g
-    ipc: host
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    networks:
-      - app_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:30000/health_generate"]
-      interval: 30s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    command: >
-      sglang serve
-      --model-path "ai-sage/GigaChat3-10B-A1.8B"
-      --host 0.0.0.0
-      --port 30000
-      --mem-fraction-static 0.45
-      --max-total-tokens 128000
-      --cuda-graph-max-bs 16
-      --kv-cache-dtype fp8_e4m3
-      --tool-call-parser gigachat3
 
-  sglang-code:
-    image: lmsysorg/sglang@sha256:7515a1e626d22a8582ad4478d3d68b294d2b484c78a023f8b61c6867454bbf4a
-    volumes:
-      - ./nlp_models/sglang_cache/huggingface:/root/.cache/huggingface
-    env_file:
-      - .env
-    shm_size: 32g
-    ipc: host
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    networks:
-      - app_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:30000/health_generate"]
-      interval: 30s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    command: >
-      sglang serve
-      --model-path "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
-      --host 0.0.0.0
-      --port 30000
-      --mem-fraction-static 0.45
-      --max-total-tokens 128000
-      --cuda-graph-max-bs 16
-      --kv-cache-dtype fp8_e4m3
 
 # ================== LANGFUSE ==================
   langfuse-worker:
