@@ -34,8 +34,10 @@ class FinalizerNode:
             SystemMessage(content=self.prompt),
             HumanMessage(content=msg),
         ])
+
+        message = f'Выполнение задачи завершено:\n\n{response.content}'
         return {
-            'messages': [response],
+            'messages': [message],
             'phase': 'done',
             'is_approved': False,
         }
