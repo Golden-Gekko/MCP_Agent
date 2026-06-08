@@ -38,23 +38,14 @@ class MCPCodingAgentApp:
             logger.error('Агент не инициализирован')
             return 'Агент не инициализирован'
 
-        config = {'configurable': {'thread_id': request.session_hash}}
-        result = await self.agent.run({'user_request': message}, config=config,)
+        request_id = request.session_hash
+        phase = self.agent.get_phase(request_id)
+        if phase is None or phase == 'done':
+            result = await self.agent.run(user_messages=message, request_id=request_id)
+        else:
+            result = await self.agent.resume(user_messages=message, request_id=request_id)
 
-        if result.get('phase', 'done') == 'done':
-            return result['messages'][-1].content
-
-        if result['phase'] == 'planning':
-            message: str = result['messages'][-1].content
-            if 'шаг' not in message.lower():
-                return 'Произошла ошибка планирования. Повторите запрос.'
-            return message
-
-        if result['phase'] == 'executing':
-            message: str = result['messages'][-1].content
-            return message
-
-        return 'Неизвесная ошибка. Повторите запрос'
+        return result[-1].content
 
     async def initialize_and_launch(self):
         await self.init_agent()
