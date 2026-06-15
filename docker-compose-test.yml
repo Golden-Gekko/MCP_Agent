@@ -1,0 +1,189 @@
+services:
+  agent:
+    build: .
+    env_file:
+      - .env
+    environment:
+      LANGFUSE__BASE_URL: "http://langfuse-web:3000"
+      LLM__CHAT__HOST: vllm-chat
+      LLM__CHAT__PORT: 30000
+      LLM__CHAT__MODEL_NAME: nvidia/Qwen3.6-35B-A3B-NVFP4
+      LLM__CODER__HOST: vllm-chat
+      LLM__CODER__PORT: 30000
+      LLM__CODER__MODEL_NAME: nvidia/Qwen3.6-35B-A3B-NVFP4
+      AGENT__WORKSPACE: /opt/app/workspace
+    ports:
+      - "8000:8000"
+    depends_on:
+      langfuse-worker:
+        condition: service_started
+      vllm-chat:
+        condition: service_healthy
+    volumes:
+      - ${AGENT__WORKSPACE}:/opt/app/workspace
+    networks:
+      - app_network
+# ================== LLM в SGLang==================
+  vllm-chat:
+    image: vllm/vllm-openai:nightly
+    volumes:
+      - ./nlp_models/sglang_cache/huggingface:/root/.cache/huggingface
+    env_file:
+      - .env
+    shm_size: 32g
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "30000:30000"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:30000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    command: >
+      nvidia/Qwen3.6-35B-A3B-NVFP4
+      --host 0.0.0.0
+      --port 30000
+      --tensor-parallel-size 1
+      --trust-remote-code
+      --quantization modelopt
+      --kv-cache-dtype fp8
+      --attention-backend flashinfer
+      --moe-backend marlin
+      --gpu-memory-utilization 0.90
+      --max-model-len 131072
+      --max-num-seqs 4
+      --max-num-batched-tokens 8192
+      --enable-chunked-prefill
+      --async-scheduling
+      --enable-prefix-caching
+      --load-format fastsafetensors
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_xml
+      --enable-auto-tool-choice
+      
+
+# ================== LANGFUSE ==================
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    restart: always
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+    env_file: .langfuse.env
+    networks:
+      - app_network
+
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    restart: always
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    env_file: .langfuse.env
+    networks:
+      - app_network
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server@sha256:537014a67ce8bf1f5c79c2e2b26fb30b8285a86ffff03875bb14ed17ea35db62
+    restart: always
+    user: "101:101"
+    env_file: .langfuse.env
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+    networks:
+      - app_network
+
+  langfuse-minio:
+    image: chainguard/minio@sha256:a342898b433b4df054f20209980e58607f90a6ead4993424832597c65371648a
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    env_file: .langfuse.env
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+    networks:
+      - app_network
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    restart: always
+    env_file: .langfuse.env
+    command: >
+      --requirepass ${REDIS_AUTH}
+      --maxmemory-policy noeviction
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    networks:
+      - app_network
+
+  langfuse-postgres:
+    image: docker.io/postgres:17
+    restart: always
+    env_file: .langfuse.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  langfuse_postgres_data:
+    driver: local
+  langfuse_clickhouse_data:
+    driver: local
+  langfuse_clickhouse_logs:
+    driver: local
+  langfuse_minio_data:
+    driver: local
+  langfuse_redis_data:
+    driver: local

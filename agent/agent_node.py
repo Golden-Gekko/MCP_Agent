@@ -41,7 +41,7 @@ class AgentNode:
 
         message = self._validate_and_parse_tool_calls(response)
         if not message.tool_calls:
-            step_text = state['plan'][state['current_step']]['description']
+            step_text = state['plan'][state['current_step']]
             message = AIMessage(
                 f'Шаг "{step_text}" выполнен. '
                 'Подтвердите выполнение словом **"Продолжить"** либо внесите корректировки:\n\n'
@@ -58,6 +58,8 @@ class AgentNode:
     def _validate_and_parse_tool_calls(message: AIMessage) -> AIMessage:
         if message.tool_calls or message.response_metadata.get('finish_reason') != 'tool_calls':
             return message
+
+        logger.critical(message.content)
 
         json_match = re.search(r'\{.*\}', message.content, re.DOTALL)
         if not json_match:

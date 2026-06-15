@@ -103,7 +103,7 @@ class MCPAgent:
     async def run(self, user_messages: str, request_id: str | None = None) -> dict[str, Any]:
         self._check_graph_available()
         trace_id = Langfuse.create_trace_id()
-        logger.info(f'Трейс при старте графа: {trace_id}')
+        logger.debug(f'Трейс при старте графа: {trace_id}')
         return await self._ainvoke_with_tracing(
             data={'user_request': user_messages, 'user_input': user_messages, 'trace_id': trace_id},
             request_id=request_id, trace_id=trace_id, span_name='agent_run'
@@ -112,7 +112,7 @@ class MCPAgent:
     async def resume(self, user_messages: str, request_id: str | None = None) -> dict[str, Any]:
         self._check_graph_available()
         trace_id = self._get_trace_id(request_id)
-        logger.info(f'Трейс при возвращении в граф: {trace_id}')
+        logger.debug(f'Трейс при возвращении в граф: {trace_id}')
         return await self._ainvoke_with_tracing(
             data=Command(update={'user_input': user_messages}),
             request_id=request_id, trace_id=trace_id, span_name='agent_resume'

@@ -49,6 +49,7 @@ class LLMConfig(BaseModel):
             api_key=self.api_key,
             model=self.model_name,
             temperature=self.temperature,
+            timeout=60,
         )
 
     @property

@@ -2,6 +2,7 @@ COMPOSE := docker compose
 
 COMPOSE_FILE := docker-compose.yml
 COMPOSE_FILE_OLLAMA := docker-compose-ollama.yml
+COMPOSE_FILE_ONE_MODEL := docker-compose-test.yml
 
 ARGS ?=
 
@@ -29,3 +30,10 @@ down-o:
 	$(COMPOSE) -f $(COMPOSE_FILE_OLLAMA) down $(ARGS)
 build-o:
 	$(COMPOSE) -f $(COMPOSE_FILE_OLLAMA) build
+
+up-q:
+	$(COMPOSE) -f $(COMPOSE_FILE_ONE_MODEL) up -d $(ARGS)
+down-q:
+	$(COMPOSE) -f $(COMPOSE_FILE_ONE_MODEL) down $(ARGS)
+build-q:
+	$(COMPOSE) -f $(COMPOSE_FILE_ONE_MODEL) build
