@@ -22,12 +22,12 @@ async def init_tools():
             'cwd': str(workspace),
             'transport': 'stdio',
         },
-        # 'context7': {
-        #     'command': 'npx',
-        #     'args': ['-y', '@upstash/context7-mcp'],
-        #     'env': {**common_env, 'CONTEXT7_API_KEY': settings.service.context7_api_key},
-        #     'transport': 'stdio',
-        # },
+        'context7': {
+            'command': 'npx',
+            'args': ['-y', '@upstash/context7-mcp'],
+            'env': {**common_env, 'CONTEXT7_API_KEY': settings.service.context7_api_key},
+            'transport': 'stdio',
+        },
         'coder': {
             'command': sys.executable,
             'args': [str(Path(__file__).parent / 'coder_mcp.py')],
