@@ -27,6 +27,7 @@ class AgentNode:
             return {
                 'messages': [RemoveMessage(id=REMOVE_ALL_MESSAGES), AIMessage(msg)],
                 'history': [],
+                'step_iteration': 0,
                 'current_step': 0,
             }
 

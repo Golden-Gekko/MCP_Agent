@@ -24,23 +24,21 @@ class PlanerNode:
 
     async def node(self, state: AgentState) -> dict:
         logger.debug(f'PlanerNode state: {state}')
-        response = await self.llm.ainvoke(
-            [SystemMessage(content=self.prompt)] +
-            state['messages'] +
-            [HumanMessage(content=state.get('user_input', ''))]
-        )
+        user_input = state.get('user_input', '')
+        messages = [SystemMessage(content=self.prompt)] + state['messages']
+        if user_input:
+            messages += [HumanMessage(content=user_input)]
+        response = await self.llm.ainvoke(messages)
 
         plan = self.parser.parse(response.content).plan
-        message = (
-            'Проверьте план действий. '
-            'Подтвердите план словом **"Продолжить"** либо внесите корректировки')
+        message = 'Проверьте план действий. Подтвердите план словом **"Продолжить"** либо внесите корректировки'
         for i, item in enumerate(plan, start=1):
             message += f'\n* Шаг {i}: {item}'
 
         return {
             'messages': [
-                HumanMessage(content=state.get('user_input', '')),
-                AIMessage(content=message)],
+                HumanMessage(content=user_input), AIMessage(content=message)
+            ] if user_input else [AIMessage(content=message)],
             'plan': plan,
             'current_step': 0,
             'phase': 'planning',
