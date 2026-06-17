@@ -47,8 +47,10 @@ cp .env.example .env
 
 Запуск с vLLM:
 ```bash
-make up
+make up WS=
 ```
+
+В параметре WS указывается путь к рабочей пространству агента
 
 Запуск с Ollama:
 ```bash
