@@ -66,10 +66,6 @@ class MCPAgent:
             return 'injector'
         return 'finalizer'
 
-    @staticmethod
-    def increment_step(state: AgentState) -> dict[str, Any]:
-        return {'current_step': state['current_step'] + 1, 'step_iteration': 0}
-
     def _compile_graph(self):
         workflow = StateGraph(AgentState)
 
@@ -80,8 +76,6 @@ class MCPAgent:
         workflow.add_node('plan_solver', PlanSolverNode().node)
         workflow.add_node('agent_solver', AgentSolverNode().node)
         workflow.add_node('injector', StepInjectorNode().node)
-
-        workflow.add_node('increment_step', self.increment_step)
         workflow.add_node('tools', ToolNode(self.tools))
 
         workflow.set_entry_point(key='planer')
