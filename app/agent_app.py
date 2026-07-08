@@ -6,6 +6,7 @@ from loguru import logger
 
 from agent import MCPAgent
 from core import settings
+from utils.auth import get_gradio_auth
 
 
 class MCPCodingAgentApp:
@@ -62,26 +63,28 @@ class MCPCodingAgentApp:
                 outputs=[chatbot, request_id_state]
             )
 
-    async def _respond(self, message: str, history: list, request_id: str):
+    async def _respond(self, message: str, history: list, request_id: str, request: gr.Request):
         if not request_id:
             request_id = str(uuid.uuid4())
 
         if not message or not message.strip():
             return history, '', request_id
 
-        phase = self.agent.get_phase(request_id)
+        phase = self.agent.get_phase(request_id, username=request.username)
         if phase is None or phase == 'done':
-            result = await self.agent.run(user_messages=message, request_id=request_id)
+            result = await self.agent.run(
+                user_messages=message, request_id=request_id, username=request.username)
         else:
-            result = await self.agent.resume(user_messages=message, request_id=request_id)
+            result = await self.agent.resume(
+                user_messages=message, request_id=request_id, username=request.username)
 
         history.append({'role': 'user', 'content': message})
         agent_response = result[-1].content if result else 'Нет ответа'
         history.append({'role': 'assistant', 'content': agent_response})
         return history, '', request_id
 
-    async def _continue(self, history: list, request_id: str):
-        phase = self.agent.get_phase(request_id)
+    async def _continue(self, history: list, request_id: str, request: gr.Request):
+        phase = self.agent.get_phase(request_id, username=request.username)
 
         if phase is None or phase == 'done':
             history.append({
@@ -90,7 +93,8 @@ class MCPCodingAgentApp:
             })
             return history, request_id
 
-        result = await self.agent.resume(user_messages='Продолжить', request_id=request_id)
+        result = await self.agent.resume(
+            user_messages='Продолжить', request_id=request_id, username=request.username)
 
         history.append({'role': 'user', 'content': '▶ Продолжить'})
         agent_response = result[-1].content if result else 'Нет ответа'
@@ -104,6 +108,8 @@ class MCPCodingAgentApp:
             server_name=settings.service.host,
             server_port=settings.service.port,
             show_error=True,
+            auth=get_gradio_auth,
+            auth_message='<p>Введите выданный Вам логин и пароль</p>'
         )
 
     def run(self):
