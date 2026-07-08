@@ -1,18 +1,19 @@
-from datetime import datetime
 from typing import Any, Literal
 
-from langfuse import Langfuse
+from langfuse import Langfuse, propagate_attributes
 from langfuse.langchain import CallbackHandler
+from langfuse.types import TraceContext
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from loguru import logger
 
 from core import settings
 from tools import init_tools
+from utils.checkpointer import close_checkpointer, create_checkpointer
 
 from .agent_node import AgentNode
 from .compressor import ContextCompressorNode
@@ -28,9 +29,7 @@ class MCPAgent:
         self.llm_with_tools: ChatOpenAI | None = None
         self.tools: list[BaseTool] | None = None
         self.graph = None
-        self.checkpointer = InMemorySaver()
-        self.lf_handler = CallbackHandler(public_key=settings.langfuse.public_key)
-        self.init_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.checkpointer: AsyncPostgresSaver | None = None
 
     async def init_graph(self):
         try:
@@ -38,8 +37,18 @@ class MCPAgent:
         except Exception as e:
             logger.error(f'Ошибка инициализации инструментов: {e}')
             raise
+        self.checkpointer = await create_checkpointer(settings.service.checkpoint_db_url)
         self.llm_with_tools = settings.llm.chat.llm.bind_tools(self.tools, parallel_tool_calls=False)
         self.graph = self._compile_graph()
+
+    async def close(self):
+        if self.checkpointer is not None:
+            await close_checkpointer(self.checkpointer)
+            self.checkpointer = None
+
+    @staticmethod
+    def resolve_thread_id(username: str | None, request_id: str) -> str:
+        return f'{username or "anonymous"}:{request_id}'
 
     @staticmethod
     def need_adjust_plan_router(state: AgentState) -> Literal['injector', 'planer']:
@@ -94,27 +103,36 @@ class MCPAgent:
         )
         return graph
 
-    async def run(self, user_messages: str, request_id: str | None = None) -> dict[str, Any]:
+    async def run(self, user_messages: str, request_id: str | None = None, username: str | None = None) -> list:
         self._check_graph_available()
         trace_id = Langfuse.create_trace_id()
         logger.debug(f'Трейс при старте графа: {trace_id}')
         return await self._ainvoke_with_tracing(
             data={'user_request': user_messages, 'user_input': user_messages, 'trace_id': trace_id},
-            request_id=request_id, trace_id=trace_id, span_name='agent_run'
+            request_id=request_id,
+            trace_id=trace_id,
+            span_name='agent_run',
+            username=username,
+            trace_input=user_messages,
         )
 
-    async def resume(self, user_messages: str, request_id: str | None = None) -> dict[str, Any]:
+    async def resume(self, user_messages: str, request_id: str | None = None, username: str | None = None) -> list:
         self._check_graph_available()
-        trace_id = self._get_trace_id(request_id)
+        trace_id = self._get_trace_id(request_id, username)
         logger.debug(f'Трейс при возвращении в граф: {trace_id}')
         return await self._ainvoke_with_tracing(
             data=Command(update={'user_input': user_messages}),
-            request_id=request_id, trace_id=trace_id, span_name='agent_resume'
+            request_id=request_id,
+            trace_id=trace_id,
+            span_name='agent_resume',
+            username=username,
+            trace_input=user_messages,
         )
 
-    def get_phase(self, request_id: str | None = None):
+    def get_phase(self, request_id: str | None = None, username: str | None = None):
         self._check_graph_available()
-        state = self.graph.get_state({'configurable': {'thread_id': request_id}}).values
+        state = self.graph.get_state(
+            {'configurable': {'thread_id': self.resolve_thread_id(username, request_id)}}).values
         return state.get('phase', None)
 
     def _check_graph_available(self):
@@ -122,29 +140,52 @@ class MCPAgent:
             raise RuntimeError(
                 'Агент не инициализирован. Запустите `initialize()`.')
 
-    def _create_config(self, request_id: str) -> dict[str, Any]:
+    def _create_config(self, request_id: str, username: str | None, trace_id: str) -> dict[str, Any]:
+        lf_handler = CallbackHandler(
+            public_key=settings.langfuse.public_key,
+            trace_context=TraceContext(trace_id=trace_id)
+        )
         return {
-            'callbacks': [self.lf_handler],
+            'callbacks': [lf_handler],
             'metadata': {
-                'langfuse_session_id': f'docker_session_{self.init_time}',
+                'langfuse_session_id': f'{username or "anonymous"}_{request_id[:8]}',
             },
-            'configurable': {'thread_id': request_id}
+            'configurable': {'thread_id': self.resolve_thread_id(username, request_id)},
         }
 
-    def _get_trace_id(self, request_id: str) -> str | None:
+    def _get_trace_id(self, request_id: str, username: str | None = None) -> str | None:
         return self.graph.get_state(
-            {'configurable': {'thread_id': request_id}}
+            {'configurable': {'thread_id': self.resolve_thread_id(username, request_id)}}
         ).values.get('trace_id', None)
 
     async def _ainvoke_with_tracing(
-            self, data: dict[str, Any] | Command, request_id: str, trace_id: str, span_name: str
-    ) -> dict[str, Any]:
+            self,
+            data: dict[str, Any] | Command,
+            request_id: str,
+            trace_id: str,
+            span_name: str,
+            username: str | None = None,
+            trace_input: str = '',
+    ) -> list:
+        user = username or 'anonymous'
+        session_id = f'{user}_{request_id[:8]}'
+
         with settings.langfuse.client.start_as_current_observation(
                 as_type='span',
                 name=span_name,
                 trace_context={'trace_id': trace_id},
         ) as span:
-            span.set_trace_io(input=data)
-            result = await self.graph.ainvoke(data, config=self._create_config(request_id))
-            span.set_trace_io(output=result)
-            return result['messages']
+            with propagate_attributes(
+                user_id=user,
+                session_id=session_id,
+                trace_name='MCP Agent',
+                tags=['langgraph', 'mcp-agent'],
+                metadata={'request_id': request_id, 'username': user},
+            ):
+                span.update(input={'message': trace_input})
+                result = await self.graph.ainvoke(
+                    data,
+                    config=self._create_config(request_id, username, trace_id),
+                )
+                span.update(output=str(result['messages'][-1].content))
+                return result['messages']
