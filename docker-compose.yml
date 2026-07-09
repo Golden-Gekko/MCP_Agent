@@ -3,6 +3,7 @@ services:
     build: .
     env_file:
       - .env
+      - .langfuse.env
     environment:
       LANGFUSE__BASE_URL: "http://langfuse-web:3000"
       LLM__CHAT__HOST: vllm-chat
@@ -12,15 +13,19 @@ services:
       LLM__CODER__PORT: 30000
       LLM__CODER__MODEL_NAME: nvidia/Qwen3.6-35B-A3B-NVFP4
       AGENT__WORKSPACE: /opt/app/workspace
+      AGENT__CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@langfuse-postgres:5432/mcp_agent
     ports:
       - "8000:8000"
     depends_on:
       langfuse-worker:
         condition: service_started
+      langfuse-postgres:
+        condition: service_healthy
       vllm-chat:
         condition: service_healthy
     volumes:
       - ${AGENT__WORKSPACE}:/opt/app/workspace
+      - ./auth:/opt/app/auth:ro
     networks:
       - app_network
 # ================== LLM в SGLang==================
@@ -169,6 +174,7 @@ services:
       retries: 10
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-agent-db.sql:/docker-entrypoint-initdb.d/02-init-agent-db.sql:ro
     networks:
       - app_network
 

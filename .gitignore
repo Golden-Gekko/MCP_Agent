@@ -147,3 +147,4 @@ Thumbs.db
 nlp_models/
 report/
 test_dir/
+auth/users.txt

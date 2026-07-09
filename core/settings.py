@@ -33,6 +33,9 @@ class ServiceConfig(BaseModel):
     context7_api_key: str
     max_retries: int = 2
     max_step_iterations: int = 30
+    auth_enabled: bool = False
+    auth_users_file: str = 'auth/users.txt'
+    checkpoint_db_url: str
 
 
 class LLMConfig(BaseModel):
