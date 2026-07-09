@@ -1,4 +1,4 @@
-COMPOSE := docker compose
+COMPOSE := docker compose --env-file .langfuse.env
 
 COMPOSE_FILE := docker-compose.yml
 COMPOSE_FILE_OLLAMA := docker-compose-ollama.yml

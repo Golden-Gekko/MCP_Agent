@@ -108,7 +108,7 @@ class MCPCodingAgentApp:
             server_name=settings.service.host,
             server_port=settings.service.port,
             show_error=True,
-            auth=get_gradio_auth,
+            auth=get_gradio_auth(),
             auth_message='<p>Введите выданный Вам логин и пароль</p>'
         )
 

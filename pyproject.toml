@@ -15,5 +15,6 @@ dependencies = [
     "langgraph==1.2.2",
     "langgraph-checkpoint-postgres>=2.0.0",
     "loguru==0.7.3",
+    "psycopg-binary>=3.3.4",
     "pydantic-settings==2.14.1",
 ]
