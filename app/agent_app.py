@@ -69,8 +69,8 @@ class MCPCodingAgentApp:
 
         if not message or not message.strip():
             return history, '', request_id
+        phase = await self.agent.get_phase(request_id, username=request.username)
 
-        phase = self.agent.get_phase(request_id, username=request.username)
         if phase is None or phase == 'done':
             result = await self.agent.run(
                 user_messages=message, request_id=request_id, username=request.username)
@@ -84,7 +84,7 @@ class MCPCodingAgentApp:
         return history, '', request_id
 
     async def _continue(self, history: list, request_id: str, request: gr.Request):
-        phase = self.agent.get_phase(request_id, username=request.username)
+        phase = await self.agent.get_phase(request_id, username=request.username)
 
         if phase is None or phase == 'done':
             history.append({

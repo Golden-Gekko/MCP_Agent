@@ -103,7 +103,7 @@ class MCPAgent:
         )
         return graph
 
-    async def run(self, user_messages: str, request_id: str | None = None, username: str | None = None) -> list:
+    async def run(self, user_messages: str, request_id: str, username: str | None = None) -> list:
         self._check_graph_available()
         trace_id = Langfuse.create_trace_id()
         logger.debug(f'Трейс при старте графа: {trace_id}')
@@ -116,9 +116,9 @@ class MCPAgent:
             trace_input=user_messages,
         )
 
-    async def resume(self, user_messages: str, request_id: str | None = None, username: str | None = None) -> list:
+    async def resume(self, user_messages: str, request_id: str, username: str | None = None) -> list:
         self._check_graph_available()
-        trace_id = self._get_trace_id(request_id, username)
+        trace_id = await self._get_trace_id(request_id, username)
         logger.debug(f'Трейс при возвращении в граф: {trace_id}')
         return await self._ainvoke_with_tracing(
             data=Command(update={'user_input': user_messages}),
@@ -129,11 +129,12 @@ class MCPAgent:
             trace_input=user_messages,
         )
 
-    def get_phase(self, request_id: str | None = None, username: str | None = None):
+    async def get_phase(self, request_id: str, username: str | None = None):
         self._check_graph_available()
-        state = self.graph.get_state(
-            {'configurable': {'thread_id': self.resolve_thread_id(username, request_id)}}).values
-        return state.get('phase', None)
+
+        state = await self.graph.aget_state(
+            {'configurable': {'thread_id': self.resolve_thread_id(username, request_id)}})
+        return state.values.get('phase', None)
 
     def _check_graph_available(self):
         if self.graph is None:
@@ -153,10 +154,11 @@ class MCPAgent:
             'configurable': {'thread_id': self.resolve_thread_id(username, request_id)},
         }
 
-    def _get_trace_id(self, request_id: str, username: str | None = None) -> str | None:
-        return self.graph.get_state(
+    async def _get_trace_id(self, request_id: str, username: str | None = None) -> str | None:
+        snapshot = await self.graph.aget_state(
             {'configurable': {'thread_id': self.resolve_thread_id(username, request_id)}}
-        ).values.get('trace_id', None)
+        )
+        return snapshot.values.get('trace_id', None)
 
     async def _ainvoke_with_tracing(
             self,
